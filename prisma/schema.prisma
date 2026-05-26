@@ -1,0 +1,103 @@
+// Prisma Schema - Định nghĩa cấu trúc database
+// Sau khi chỉnh sửa file này, chạy: npx prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum định nghĩa loại giao dịch
+enum TransactionType {
+  INCOME  // Thu nhập
+  EXPENSE // Chi tiêu
+}
+
+// Bảng users - thông tin người dùng
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // Lưu dạng hash (bcrypt), KHÔNG lưu plain text
+  fullName  String   @map("full_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  refreshTokens RefreshToken[]
+  wallets       Wallet[]
+  categories    Category[]
+  transactions  Transaction[]
+
+  @@map("users")
+}
+
+// Bảng refresh_tokens - lưu refresh token đã hash
+// Mục đích: cho phép logout và revoke token
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @map("token_hash") // Token được hash bằng bcrypt
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// Bảng wallets - ví tiền của người dùng
+model Wallet {
+  id        String   @id @default(uuid())
+  name      String
+  balance   Decimal  @default(0) @db.Decimal(15, 2) // 15 chữ số, 2 số thập phân
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("wallets")
+}
+
+// Bảng categories - danh mục thu/chi
+model Category {
+  id        String          @id @default(uuid())
+  name      String
+  type      TransactionType // INCOME hoặc EXPENSE
+  userId    String          @map("user_id")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+// Bảng transactions - giao dịch thu/chi
+model Transaction {
+  id              String          @id @default(uuid())
+  amount          Decimal         @db.Decimal(15, 2)
+  type            TransactionType
+  note            String?         // Ghi chú (tuỳ chọn)
+  transactionDate DateTime        @map("transaction_date")
+  walletId        String          @map("wallet_id")
+  categoryId      String          @map("category_id")
+  userId          String          @map("user_id")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  wallet   Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict) // Không xóa category nếu còn transaction
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
